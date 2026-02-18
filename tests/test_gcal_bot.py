@@ -2,7 +2,7 @@
 test_gcal_bot.py
 """
 
-from gcal_bot import get_earliest_available_date, toast
+from src.gcal_bot import get_earliest_available_date, toast
 
 LINKS = [
    "https://calendar.app.google/eAdwLgoFB71AnZ5m9",

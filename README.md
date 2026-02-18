@@ -140,7 +140,9 @@ To enable SMS notifications via Twilio, add these to `.env`:
 
 2) Run:
 
-    python test_gcal_bot.py
+```bash
+    python -m tests.test_gcal_bot
+```
 
 This will:
 - open each booking link
@@ -157,6 +159,7 @@ This will:
 
 Use `get_earliest_available_date()` to fetch the earliest date one time:
 
+```python
     from gcal_bot import get_earliest_available_date
 
     r = get_earliest_available_date(
@@ -166,6 +169,7 @@ Use `get_earliest_available_date()` to fetch the earliest date one time:
     )
 
     print(r.iso_date if r else None)
+```
 
 Return type:
 - `None` if no availability found in scan window
@@ -176,7 +180,9 @@ Return type:
 
 Set `BOOKING_URL` in `.env`, then run:
 
-    python gcal_bot.py
+```bash
+    python -m src.gcal_bot
+```
 
 The poller will:
 - check availability every `POLL_SECONDS` seconds (with jitter)
