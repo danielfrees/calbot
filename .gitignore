@@ -1,0 +1,138 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# =========================
+# Virtual Environments
+# =========================
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Conda
+conda-meta/
+*.conda
+*.env
+.python-version
+
+# =========================
+# Environment Variables / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Playwright
+# =========================
+playwright/.local-browsers/
+playwright-report/
+test-results/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+.history/
+
+# =========================
+# PyCharm / JetBrains
+# =========================
+.idea/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Windows
+# =========================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =========================
+# macOS
+# =========================
+.DS_Store
+
+# =========================
+# Coverage
+# =========================
+.coverage
+.coverage.*
+htmlcov/
+
+# =========================
+# Testing
+# =========================
+.pytest_cache/
+.mypy_cache/
+
+# =========================
+# Type checking
+# =========================
+.dmypy.json
+dmypy.json
+
+# =========================
+# Temporary files
+# =========================
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# =========================
+# Node (if ever added)
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# Docker (if added later)
+# =========================
+.dockerignore
+docker-compose.override.yml
+
+# =========================
+# Misc
+# =========================
+.cache/
