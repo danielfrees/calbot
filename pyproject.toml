@@ -1,0 +1,16 @@
+[project]
+name = "calbot"
+version = "0.1.0"
+description = "Google Calendar booking link watcher using Playwright"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright",
+    "python-dotenv",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.black]
+line-length = 100
