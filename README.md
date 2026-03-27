@@ -99,6 +99,7 @@ Common settings:
 
     # Navigation bounds
     MAX_MONTH_FORWARD=48
+    MAX_MONTHS_AWAY=18
     MAX_WEEKS_PER_MONTH=10
 
     # Performance tuning
@@ -172,7 +173,7 @@ Use `get_earliest_available_date()` to fetch the earliest date one time:
 ```
 
 Return type:
-- `None` if no availability found in scan window
+- `None` if no availability is found in scan window
 - otherwise `EarliestAvailability(iso_date="YYYY-MM-DD", source="modal_date_min")`
 
 
@@ -206,6 +207,7 @@ Then it:
 2. If time slots exist, clicks a few time buttons and reads the modal dialog text to parse the appointment date
 3. If it finds a “seed” date, scans that month week-by-week to find the minimum date in the month
 4. If it sees "No available times in the next year", it fast-forwards months and retries jump-to-next-bookable
+5. If it reaches `MAX_MONTHS_AWAY`, it stops early and reports `No times in the next MAX_MONTHS_AWAY months`
 
 Because web UIs can change, this logic uses heuristics and regex patterns for date parsing.
 

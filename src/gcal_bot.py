@@ -22,6 +22,7 @@ TIMEOUT_MS_DEFAULT = int(os.getenv("TIMEOUT_MS", "60000"))
 POLL_SECONDS_DEFAULT = int(os.getenv("POLL_SECONDS", "120"))
 
 MAX_MONTH_FORWARD_DEFAULT = int(os.getenv("MAX_MONTH_FORWARD", "48"))
+MAX_MONTHS_AWAY_DEFAULT = int(os.getenv("MAX_MONTHS_AWAY", "18"))
 MAX_WEEKS_PER_MONTH_DEFAULT = int(os.getenv("MAX_WEEKS_PER_MONTH", "10"))
 
 # FAST defaults (override in .env if needed)
@@ -95,6 +96,17 @@ def _jitter_s(seconds: int | float, frac: float = JITTER_FRACTION_DEFAULT) -> fl
 def _wait_ms(page, ms: int) -> None:
     page.wait_for_timeout(_jitter_ms(ms))
 
+def _months_away(from_date: date, to_date: date) -> int:
+    return (to_date.year - from_date.year) * 12 + (to_date.month - from_date.month)
+
+def _is_beyond_max_months_away(target_date: date, max_months_away: int, *, from_date: Optional[date] = None) -> bool:
+    anchor = from_date or date.today()
+    return _months_away(anchor, target_date) > max_months_away
+
+def _no_times_in_window_message(max_months_away: int) -> str:
+    unit = "month" if max_months_away == 1 else "months"
+    return f"No times in the next {max_months_away} {unit}"
+
 # ==============================================================================
 # Public types
 # ==============================================================================
@@ -102,6 +114,12 @@ def _wait_ms(page, ms: int) -> None:
 class EarliestAvailability:
     iso_date: str
     source: str  # "modal_date_min"
+
+@dataclass(frozen=True)
+class AvailabilitySearchResult:
+    availability: Optional[EarliestAvailability]
+    message: Optional[str] = None
+    reached_max_months_away: bool = False
 
 # ==============================================================================
 # Notifications
@@ -403,16 +421,17 @@ def _scan_month_week_by_week(
 
     return found
 
-def get_earliest_available_date(
+def find_earliest_availability(
     booking_url: str,
     *,
     headless: bool = HEADLESS_DEFAULT,
     timeout_ms: int = TIMEOUT_MS_DEFAULT,
     max_month_forward: int = MAX_MONTH_FORWARD_DEFAULT,
+    max_months_away: int = MAX_MONTHS_AWAY_DEFAULT,
     max_weeks_per_month: int = MAX_WEEKS_PER_MONTH_DEFAULT,
     max_time_clicks_per_week: int = MAX_TIME_CLICKS_PER_WEEK_DEFAULT,
     debug: bool = False,
-) -> Optional[EarliestAvailability]:
+) -> AvailabilitySearchResult:
     """
     Behavior:
         - If "No available times in the next year" appears:
@@ -422,6 +441,10 @@ def get_earliest_available_date(
             - move month-by-month, but within each month week-step if needed (fast),
             so we don’t miss availability in later weeks even if the first week shows NO_AVAIL.
     """
+    today = date.today()
+    max_month_steps = min(max_month_forward, max_months_away)
+    no_times_message = _no_times_in_window_message(max_months_away)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
         page = browser.new_page()
@@ -430,7 +453,8 @@ def get_earliest_available_date(
         _click_jump_to_next_bookable(page, debug=debug)
         _wait_ms(page, 220)
 
-        for month_step in range(max_month_forward + 1):
+        month_step = 0
+        while month_step <= max_month_steps:
             _dismiss_modal(page)
 
             status = _wait_until_times_or_messages(page, timeout_ms=WAIT_STEP_MS_DEFAULT)
@@ -440,9 +464,19 @@ def get_earliest_available_date(
             if status == "nxty":
                 if debug:
                     print("[debug] 'No available times in the next year' detected")
-                if not _fast_forward_months(page, FAST_FORWARD_MONTHS_ON_NEXT_YEAR, debug=debug):
+                remaining_months = max_month_steps - month_step
+                if remaining_months <= 0:
                     browser.close()
-                    return None
+                    return AvailabilitySearchResult(
+                        availability=None,
+                        message=no_times_message,
+                        reached_max_months_away=True,
+                    )
+                months_to_advance = min(FAST_FORWARD_MONTHS_ON_NEXT_YEAR, remaining_months)
+                if not _fast_forward_months(page, months_to_advance, debug=debug):
+                    browser.close()
+                    return AvailabilitySearchResult(availability=None)
+                month_step += months_to_advance
                 _wait_ms(page, 800)
                 _click_jump_to_next_bookable(page, debug=debug)
                 _wait_ms(page, 800)
@@ -464,9 +498,19 @@ def get_earliest_available_date(
                     if s2 == "nxty":
                         if debug:
                             print("[debug] 'No available times in the next year' detected during probe")
-                        if not _fast_forward_months(page, FAST_FORWARD_MONTHS_ON_NEXT_YEAR, debug=debug):
+                        remaining_months = max_month_steps - month_step
+                        if remaining_months <= 0:
                             browser.close()
-                            return None
+                            return AvailabilitySearchResult(
+                                availability=None,
+                                message=no_times_message,
+                                reached_max_months_away=True,
+                            )
+                        months_to_advance = min(FAST_FORWARD_MONTHS_ON_NEXT_YEAR, remaining_months)
+                        if not _fast_forward_months(page, months_to_advance, debug=debug):
+                            browser.close()
+                            return AvailabilitySearchResult(availability=None)
+                        month_step += months_to_advance
                         _wait_ms(page, 220)
                         _click_jump_to_next_bookable(page, debug=debug)
                         _wait_ms(page, 220)
@@ -479,6 +523,13 @@ def get_earliest_available_date(
 
             if seed_dates:
                 seed_min = min(seed_dates)
+                if _is_beyond_max_months_away(seed_min, max_months_away, from_date=today):
+                    browser.close()
+                    return AvailabilitySearchResult(
+                        availability=None,
+                        message=no_times_message,
+                        reached_max_months_away=True,
+                    )
                 month_ym = (seed_min.year, seed_min.month)
                 if debug:
                     print(f"[debug] seeded month_ym={month_ym} seed_min={seed_min.isoformat()}")
@@ -493,17 +544,54 @@ def get_earliest_available_date(
                 )
                 if found:
                     earliest = min(found)
+                    if _is_beyond_max_months_away(earliest, max_months_away, from_date=today):
+                        browser.close()
+                        return AvailabilitySearchResult(
+                            availability=None,
+                            message=no_times_message,
+                            reached_max_months_away=True,
+                        )
                     browser.close()
-                    return EarliestAvailability(iso_date=earliest.isoformat(), source="modal_date_min")
+                    return AvailabilitySearchResult(
+                        availability=EarliestAvailability(iso_date=earliest.isoformat(), source="modal_date_min")
+                    )
 
-            if month_step >= max_month_forward:
+            if month_step >= max_month_steps:
                 break
             if not _click_next_month(page, debug=debug):
                 break
+            month_step += 1
             _wait_ms(page, MONTH_STEP_PAUSE_MS_DEFAULT)
 
         browser.close()
-        return None
+        return AvailabilitySearchResult(
+            availability=None,
+            message=no_times_message if month_step >= max_month_steps else None,
+            reached_max_months_away=month_step >= max_month_steps,
+        )
+
+def get_earliest_available_date(
+    booking_url: str,
+    *,
+    headless: bool = HEADLESS_DEFAULT,
+    timeout_ms: int = TIMEOUT_MS_DEFAULT,
+    max_month_forward: int = MAX_MONTH_FORWARD_DEFAULT,
+    max_months_away: int = MAX_MONTHS_AWAY_DEFAULT,
+    max_weeks_per_month: int = MAX_WEEKS_PER_MONTH_DEFAULT,
+    max_time_clicks_per_week: int = MAX_TIME_CLICKS_PER_WEEK_DEFAULT,
+    debug: bool = False,
+) -> Optional[EarliestAvailability]:
+    result = find_earliest_availability(
+        booking_url,
+        headless=headless,
+        timeout_ms=timeout_ms,
+        max_month_forward=max_month_forward,
+        max_months_away=max_months_away,
+        max_weeks_per_month=max_weeks_per_month,
+        max_time_clicks_per_week=max_time_clicks_per_week,
+        debug=debug,
+    )
+    return result.availability
 
 def poll_earliest_and_notify(
     booking_url: str,
@@ -519,21 +607,30 @@ def poll_earliest_and_notify(
     print(f"Polling every {poll_seconds}s | URL: {booking_url}")
 
     while True:
-        r = get_earliest_available_date(
+        result = find_earliest_availability(
             booking_url,
             headless=headless,
             debug=debug,
         )
-        current = r.iso_date if r else None
+        r = result.availability
+        current = r.iso_date if r else result.message
 
         if current and (not only_notify_on_change or current != last_seen):
-            notify(
-                "Appointment Bot",
-                f"Earliest available date: {current} (source={r.source})\n"
-                f"Book here: {booking_url}",
-                print_to_terminal=print_to_terminal,
-                toast_alert=toast_alert,
-            )
+            if r:
+                notify(
+                    "Appointment Bot",
+                    f"Earliest available date: {current} (source={r.source})\n"
+                    f"Book here: {booking_url}",
+                    print_to_terminal=print_to_terminal,
+                    toast_alert=toast_alert,
+                )
+            elif result.reached_max_months_away:
+                notify(
+                    "Appointment Bot",
+                    current,
+                    print_to_terminal=print_to_terminal,
+                    toast_alert=toast_alert,
+                )
             last_seen = current
 
         time.sleep(_jitter_s(poll_seconds))
